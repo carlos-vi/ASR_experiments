@@ -148,6 +148,17 @@ def test_padding_does_not_change_the_output():
     assert torch.allclose(alone[0, :18], padded[0, :18], atol=1e-1)
 
 
+def test_augmentation_can_be_switched_off_during_training():
+    model = ConformerCTC(d_model=32, layers=1, heads=2, conv_kernel=7, dropout=0.0).train()
+    wave, lengths = torch.randn(1, 16000), torch.tensor([16000])
+    model.use_augment = False
+    with torch.no_grad():
+        assert torch.equal(model(wave, lengths)[0], model(wave, lengths)[0])
+    model.use_augment = True
+    with torch.no_grad():
+        assert not torch.equal(model(wave, lengths)[0], model(wave, lengths)[0])
+
+
 def test_default_model_size_is_budget_friendly():
     assert 4e6 < count_parameters(ConformerCTC()) < 10e6
 

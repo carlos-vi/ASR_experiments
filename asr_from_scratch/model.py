@@ -137,6 +137,7 @@ class ConformerCTC(nn.Module):
         super().__init__()
         self.features = LogMel(n_mels)
         self.augment = SpecAugment()
+        self.use_augment = True
         # 10 ms -> 40 ms per frame. The sequence is four times shorter, which makes
         # attention far cheaper since its cost grows with the square of the length.
         self.subsampling = nn.Sequential(
@@ -155,7 +156,7 @@ class ConformerCTC(nn.Module):
         """waves: (batch, samples). Returns log-probabilities (batch, T, vocab) and lengths."""
         with torch.no_grad(), torch.autocast(device_type=waves.device.type, enabled=False):
             x, frames = self.features(waves, lengths)
-            if self.training:
+            if self.training and self.use_augment:
                 x = self.augment(x, frames)
 
         x = self.subsampling(x.unsqueeze(1))  # (batch, channels, T, mels)

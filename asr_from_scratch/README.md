@@ -15,7 +15,7 @@ The training pipeline is designed around one constraint: get the best possible m
 | Output | 28 characters (`a-z`, space, apostrophe) plus the CTC blank |
 | Dataset | LibriSpeech `train-clean-100` + `train-clean-360` (about 460 h) |
 | Training | AdamW, mixed precision, DistributedDataParallel, time-based learning rate schedule |
-| Augmentation | SpecAugment |
+| Augmentation | SpecAugment, after the first 25 % of the run |
 | Decoding | Greedy, or prefix beam search with a pretrained 3-gram language model |
 
 ## Results
@@ -58,6 +58,7 @@ torchrun --nproc_per_node=2 -m asr_from_scratch.train \
 | `--minutes` | `55` | Training time budget |
 | `--batch-seconds` | `160` | Seconds of audio per batch on each GPU |
 | `--lr` | `1e-3` | Peak learning rate |
+| `--augment-after` | `0.25` | Fraction of the run before SpecAugment starts (`1` disables it) |
 | `--d-model`, `--layers`, `--heads`, `--conv-kernel` | `144`, `12`, `4`, `31` | Model size |
 | `--eval-minutes` | `10` | Time between validation runs and checkpoints |
 | `--resume` | off | Continue from `last.pt` |

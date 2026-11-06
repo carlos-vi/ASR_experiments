@@ -64,6 +64,8 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
                         help="Seconds of audio per batch on each GPU")
     parser.add_argument("--lr", type=float, default=1e-3, help="Peak learning rate")
     parser.add_argument("--weight-decay", type=float, default=1e-2)
+    parser.add_argument("--augment-after", type=float, default=0.25,
+                        help="Fraction of the run before SpecAugment starts (1 disables it)")
     parser.add_argument("--max-seconds", type=float, default=20.0, help="Skip longer clips")
     parser.add_argument("--d-model", type=int, default=144)
     parser.add_argument("--layers", type=int, default=12)
@@ -125,7 +127,7 @@ def main(argv: list[str] | None = None) -> None:
     scaler = torch.amp.GradScaler("cuda", enabled=use_gpu)
     ctc_loss = torch.nn.CTCLoss(blank=0, zero_infinity=True)
 
-    step, start_epoch, elapsed_before, best_wer = 0, 0, 0.0, float("inf")
+    step, start_epoch, elapsed_before, best_cer = 0, 0, 0.0, float("inf")
     last_path, best_path = args.output / "last.pt", args.output / "best.pt"
     if args.resume and last_path.exists():
         checkpoint = torch.load(last_path, map_location=device)
@@ -133,7 +135,7 @@ def main(argv: list[str] | None = None) -> None:
         optimizer.load_state_dict(checkpoint["optimizer"])
         scaler.load_state_dict(checkpoint["scaler"])
         step, start_epoch = checkpoint["step"], checkpoint["epoch"] + 1
-        elapsed_before, best_wer = checkpoint["elapsed"], checkpoint["best_wer"]
+        elapsed_before, best_cer = checkpoint["elapsed"], checkpoint["best_cer"]
         if is_main:
             print(f"Resuming from step {step} ({elapsed_before / 60:.1f} min elapsed)", flush=True)
 
@@ -148,21 +150,23 @@ def main(argv: list[str] | None = None) -> None:
         trained_model = DistributedDataParallel(model, device_ids=[local_rank] if use_gpu else None)
 
     def validate(epoch: int, elapsed: float) -> None:
-        nonlocal best_wer
+        nonlocal best_cer
         outputs, references = collect_log_probs(model, val_set, device, workers=min(args.workers, 1))
         hypotheses = greedy_transcripts(outputs)
-        score = wer(references, hypotheses)
-        print(f"validation | step {step} | {elapsed / 60:5.1f} min | WER {score:.3f} | "
-              f"CER {cer(references, hypotheses):.3f}", flush=True)
+        word_errors, score = wer(references, hypotheses), cer(references, hypotheses)
+        print(f"validation | step {step} | {elapsed / 60:5.1f} min | WER {word_errors:.3f} | "
+              f"CER {score:.3f}", flush=True)
         for reference, hypothesis in list(zip(references, hypotheses))[:2]:
             print(f"  ref: {reference}\n  hyp: {hypothesis}", flush=True)
-        if score < best_wer:
-            best_wer = score
+        # CER rather than WER: an empty output scores a WER of exactly 1.0, which would
+        # beat the early transcripts of a model that has actually started to learn.
+        if score < best_cer:
+            best_cer = score
             save_checkpoint(best_path, model=model.state_dict(), model_config=model_config,
-                            step=step, wer=score)
+                            step=step, wer=word_errors, cer=score)
         save_checkpoint(last_path, model=model.state_dict(), model_config=model_config,
                         optimizer=optimizer.state_dict(), scaler=scaler.state_dict(),
-                        step=step, epoch=epoch, elapsed=elapsed, best_wer=best_wer)
+                        step=step, epoch=epoch, elapsed=elapsed, best_cer=best_cer)
 
     budget = args.minutes * 60
     eval_interval = args.eval_minutes * 60
@@ -189,6 +193,10 @@ def main(argv: list[str] | None = None) -> None:
                 break
             for group in optimizer.param_groups:
                 group["lr"] = learning_rate(progress, args.lr)
+            # CTC models first have to escape a plateau in which they only emit blanks
+            # and common letters. Hiding parts of the input during that phase can keep
+            # them there, so augmentation starts once they are learning.
+            model.use_augment = progress >= args.augment_after
 
             waves = waves.to(device, non_blocking=True)
             wave_lengths = wave_lengths.to(device, non_blocking=True)
@@ -228,7 +236,7 @@ def main(argv: list[str] | None = None) -> None:
 
     if is_main:
         validate(epoch, elapsed)
-        print(f"Finished in {elapsed / 60:.1f} min, {step} steps, best validation WER {best_wer:.3f}",
+        print(f"Finished in {elapsed / 60:.1f} min, {step} steps, best validation CER {best_cer:.3f}",
               flush=True)
     if distributed:
         dist.barrier()
