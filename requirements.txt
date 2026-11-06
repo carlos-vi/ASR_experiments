@@ -1,0 +1,16 @@
+# Shared
+numpy
+scipy
+soundfile
+
+# whisper_transcriber
+faster-whisper
+sounddevice
+
+# asr_from_scratch
+torch
+huggingface_hub   # dataset download
+pyarrow           # dataset download
+
+# Development
+pytest
