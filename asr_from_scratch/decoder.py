@@ -49,8 +49,8 @@ def _word_score(prefix: str, lm: ArpaLanguageModel, alpha: float, beta: float) -
 def beam_search_decode(
     log_probs: np.ndarray,
     lm: ArpaLanguageModel | None = None,
-    alpha: float = 0.7,
-    beta: float = 1.0,
+    alpha: float = 0.8,
+    beta: float = 3.0,
     beam_width: int = 64,
     prune_below: float = -6.0,
 ) -> str:

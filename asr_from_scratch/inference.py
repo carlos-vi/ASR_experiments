@@ -34,8 +34,8 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("checkpoint")
     parser.add_argument("audio")
     parser.add_argument("--lm", help="ARPA language model (.arpa or .arpa.gz) for beam search")
-    parser.add_argument("--alpha", type=float, default=0.7, help="Language model weight")
-    parser.add_argument("--beta", type=float, default=1.0, help="Per-word bonus")
+    parser.add_argument("--alpha", type=float, default=0.8, help="Language model weight")
+    parser.add_argument("--beta", type=float, default=3.0, help="Per-word bonus")
     args = parser.parse_args(argv)
 
     log_probs, lengths = log_probabilities(load_checkpoint(args.checkpoint), load_waveform(args.audio))

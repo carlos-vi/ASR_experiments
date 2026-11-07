@@ -62,13 +62,13 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
                         help="Use a fixed number of steps instead of the time budget")
     parser.add_argument("--batch-seconds", type=float, default=160.0,
                         help="Seconds of audio per batch on each GPU")
-    parser.add_argument("--lr", type=float, default=1e-3, help="Peak learning rate")
+    parser.add_argument("--lr", type=float, default=3e-4, help="Peak learning rate")
     parser.add_argument("--weight-decay", type=float, default=1e-2)
-    parser.add_argument("--augment-after", type=float, default=0.25,
+    parser.add_argument("--augment-after", type=float, default=1.0,
                         help="Fraction of the run before SpecAugment starts (1 disables it)")
     parser.add_argument("--max-seconds", type=float, default=20.0, help="Skip longer clips")
     parser.add_argument("--d-model", type=int, default=144)
-    parser.add_argument("--layers", type=int, default=12)
+    parser.add_argument("--layers", type=int, default=6)
     parser.add_argument("--heads", type=int, default=4)
     parser.add_argument("--conv-kernel", type=int, default=31)
     parser.add_argument("--dropout", type=float, default=0.1)
@@ -193,9 +193,8 @@ def main(argv: list[str] | None = None) -> None:
                 break
             for group in optimizer.param_groups:
                 group["lr"] = learning_rate(progress, args.lr)
-            # CTC models first have to escape a plateau in which they only emit blanks
-            # and common letters. Hiding parts of the input during that phase can keep
-            # them there, so augmentation starts once they are learning.
+            # Off by default, which is how the reported results were obtained. When enabled,
+            # it starts late so that it does not hinder the first stage of CTC learning.
             model.use_augment = progress >= args.augment_after
 
             waves = waves.to(device, non_blocking=True)

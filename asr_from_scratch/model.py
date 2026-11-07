@@ -132,7 +132,7 @@ class ConformerBlock(nn.Module):
 
 
 class ConformerCTC(nn.Module):
-    def __init__(self, d_model: int = 144, layers: int = 12, heads: int = 4,
+    def __init__(self, d_model: int = 144, layers: int = 6, heads: int = 4,
                  conv_kernel: int = 31, dropout: float = 0.1, n_mels: int = N_MELS) -> None:
         super().__init__()
         self.features = LogMel(n_mels)

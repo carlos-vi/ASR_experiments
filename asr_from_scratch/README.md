@@ -9,22 +9,51 @@ The training pipeline is designed around one constraint: get the best possible m
 | | |
 |---|---|
 | Architecture | Conformer encoder with a CTC output layer |
-| Size | 6.2 M parameters: `d_model` 144, 12 blocks, 4 attention heads, convolution kernel 31 |
+| Size | 3.1 M parameters: `d_model` 144, 6 blocks, 4 attention heads, convolution kernel 31 |
 | Input | 16 kHz mono audio, converted to 80-band log-Mel features (25 ms window, 10 ms hop) |
 | Subsampling | Two strided convolutions, 40 ms per output frame |
 | Output | 28 characters (`a-z`, space, apostrophe) plus the CTC blank |
 | Dataset | LibriSpeech `train-clean-100` + `train-clean-360` (about 460 h) |
 | Training | AdamW, mixed precision, DistributedDataParallel, time-based learning rate schedule |
-| Augmentation | SpecAugment, after the first 25 % of the run |
+| Augmentation | None by default; SpecAugment available through `--augment-after` |
 | Decoding | Greedy, or prefix beam search with a pretrained 3-gram language model |
 
 ## Results
 
-**The model has not been trained on the full dataset yet.** WER and CER on LibriSpeech `test-clean` will be reported here once the first training run is complete.
+Measured on all 2,620 clips of LibriSpeech `test-clean`, after 55 minutes of training on two T4 GPUs with the default settings:
 
-As a reference for expectations, this is a compact character-level model with one hour of training, compared to the hundreds of thousands of hours of audio behind Whisper. The notebook measures both on the same clips. Performance will also be lower on microphone audio than on the audiobooks it trains on, since LibriSpeech contains clean, read speech.
+| Decoding | WER | CER |
+|---|---|---|
+| Greedy | 33.3 % | 10.4 % |
+| Beam search + 3-gram language model | **17.1 %** | **7.2 %** |
 
-### Verification so far
+The language model weights (`alpha` 0.8, `beta` 3.0) were tuned on 100 validation clips.
+
+Sample output, with beam search and the language model:
+
+```
+ref: my tongue refused to articulate my power of speech left me
+hyp: my tongue refused to articulate my power of speech laughed me
+
+ref: but this subject will be more properly discussed when we treat of the different races of mankind
+hyp: but this subject will be more properly is gustatreet of he different races of mankind
+```
+
+These figures come from a single run. As a reference for expectations, this is a compact character-level model with one hour of training, compared to the hundreds of thousands of hours of audio behind Whisper. The notebook can measure both on the same clips. Expect lower accuracy on microphone audio than on the audiobooks it trains on, since LibriSpeech contains clean, read speech.
+
+### How the configuration was chosen
+
+Each row is one Kaggle run of 55 minutes on the full training set, evaluated on `test-clean` with greedy decoding:
+
+| GPUs | Blocks | Peak learning rate | WER | CER |
+|---|---|---|---|---|
+| 1 | 12 | 2e-4 | 47.1 % | 15.6 % |
+| 1 | 6 | 3e-4 | 37.9 % | 12.0 % |
+| 2 | 6 | 3e-4 | 33.3 % | 10.4 % |
+
+With a peak learning rate of 1e-3, the 12-block model never left the CTC plateau: the loss stayed near 2.59 and the output was only a few repeated letters. Removing SpecAugment did not help; lowering the learning rate did.
+
+### Pipeline checks
 
 These checks confirm that the pipeline is correct. They do not predict accuracy on unseen speech.
 
@@ -35,8 +64,6 @@ These checks confirm that the pipeline is correct. They do not predict accuracy 
 | Beam search with the real 3-gram model on simulated noisy output | Separates words correctly and rejects out-of-vocabulary merges |
 | Log-Mel features compared with `torchaudio` | Relative difference of 1e-7 |
 | LibriSpeech download and extraction, on a 15-minute subset of `dev-clean` | 158 clips with correct transcripts |
-
-GPU training with mixed precision on the T4s and the download of the full training set will run for the first time in the notebook.
 
 ## Quick start
 
@@ -57,9 +84,9 @@ torchrun --nproc_per_node=2 -m asr_from_scratch.train \
 |---|---|---|
 | `--minutes` | `55` | Training time budget |
 | `--batch-seconds` | `160` | Seconds of audio per batch on each GPU |
-| `--lr` | `1e-3` | Peak learning rate |
-| `--augment-after` | `0.25` | Fraction of the run before SpecAugment starts (`1` disables it) |
-| `--d-model`, `--layers`, `--heads`, `--conv-kernel` | `144`, `12`, `4`, `31` | Model size |
+| `--lr` | `3e-4` | Peak learning rate |
+| `--augment-after` | `1` | Fraction of the run before SpecAugment starts (`1` disables it) |
+| `--d-model`, `--layers`, `--heads`, `--conv-kernel` | `144`, `6`, `4`, `31` | Model size |
 | `--eval-minutes` | `10` | Time between validation runs and checkpoints |
 | `--resume` | off | Continue from `last.pt` |
 
@@ -93,9 +120,10 @@ python -m asr_from_scratch.inference checkpoints/best.pt audio.wav --lm 3-gram.p
 |---|---|
 | **Time-based schedule** | The run length is set in minutes, and the learning rate follows the clock instead of a step count. The warm-up and decay cycle always completes, and the run ends on schedule regardless of the speed of the GPU assigned. |
 | **Two GPUs with DDP** | Each GPU runs its own process and computes gradients on different data, which nearly doubles the throughput with little overhead. |
-| **Compact Conformer** | Convolution and attention capture local and global context, and the Conformer is an established architecture for ASR. A compact size leaves more weight updates in the budget, and small models converge faster. |
+| **Compact Conformer** | Convolution and attention capture local and global context, and the Conformer is an established architecture for ASR. A compact size leaves more weight updates in the budget: in the same 55 minutes, 6 blocks beat 12. |
+| **Moderate learning rate** | A peak of 3e-4 lets the model leave the CTC plateau, where it only emits blanks and common letters. A peak of 1e-3 kept the 12-block model there for the whole run. |
 | **More data, not more epochs** | For the same number of updates, seeing 460 h of different audio generalizes better than repeating 100 h several times. |
-| **Features on the GPU** | Spectrograms and SpecAugment run as GPU batch operations, so the few CPU cores available only have to read files. |
+| **Features on the GPU** | Spectrograms run as GPU batch operations, so the few CPU cores available only have to read files. |
 | **Duration-bucketed batches** | Batches hold a fixed amount of audio from clips of similar length, which minimizes the GPU time spent on padding. |
 | **Language model at decoding** | A pretrained n-gram model adds knowledge of English that needs no training time at all. |
 
@@ -119,7 +147,7 @@ The blank separates true double letters (`l _ l` gives `ll`, while `l l` gives `
 
 ### The Conformer
 
-Two strided convolutions first reduce the sequence to 25 frames per second, which is still plenty for the 12 to 15 characters of typical speech, and makes attention much cheaper, as its cost grows with the square of the length. Each of the 12 blocks then applies:
+Two strided convolutions first reduce the sequence to 25 frames per second, which is still plenty for the 12 to 15 characters of typical speech, and makes attention much cheaper, as its cost grows with the square of the length. Each of the 6 blocks then applies:
 
 ```
 half feed-forward → self-attention → convolution → half feed-forward
@@ -147,7 +175,7 @@ Hypotheses are also penalized as soon as the word being spelled can no longer be
 - Output is lowercase, without punctuation or digits.
 - Inference processes complete clips rather than streaming.
 
-Natural next steps are noise augmentation, sub-word (BPE) tokens and longer training.
+Natural next steps are longer training, SpecAugment and noise augmentation at the current learning rate, sub-word (BPE) tokens, and a wider search for the language model weights, since the best `beta` sits at the edge of the current grid.
 
 ## Code layout
 

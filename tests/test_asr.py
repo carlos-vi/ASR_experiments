@@ -160,7 +160,7 @@ def test_augmentation_can_be_switched_off_during_training():
 
 
 def test_default_model_size_is_budget_friendly():
-    assert 4e6 < count_parameters(ConformerCTC()) < 10e6
+    assert 2e6 < count_parameters(ConformerCTC()) < 5e6
 
 
 def test_learning_rate_schedule_reaches_peak_and_decays():
