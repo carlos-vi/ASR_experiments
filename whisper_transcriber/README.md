@@ -92,7 +92,18 @@ This is a small sample of clean, read speech, so it serves as a sanity check rat
 | `transcribe_mic.py` | Microphone command line tool |
 | `transcribe_file.py` | Audio file command line tool |
 
+## License and credits
+
+The code in this package is released under the [MIT License](../LICENSE). Model weights are not stored in this repository: they are downloaded on first use.
+
+| Resource | License |
+|---|---|
+| [Whisper](https://github.com/openai/whisper) code and weights, by OpenAI | MIT |
+| [faster-whisper](https://github.com/SYSTRAN/faster-whisper) and its [converted models](https://huggingface.co/Systran) | MIT |
+| [LibriSpeech](https://www.openslr.org/12/), used for the evaluation above | CC BY 4.0 |
+
 ## References
 
 - Radford et al., [Robust Speech Recognition via Large-Scale Weak Supervision](https://arxiv.org/abs/2212.04356), 2022.
+- Panayotov et al., [LibriSpeech: An ASR Corpus Based on Public Domain Audio Books](https://www.danielpovey.org/files/2015_icassp_librispeech.pdf), 2015.
 - [faster-whisper](https://github.com/SYSTRAN/faster-whisper) and [CTranslate2](https://github.com/OpenNMT/CTranslate2).

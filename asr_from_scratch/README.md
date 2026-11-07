@@ -67,6 +67,20 @@ These checks confirm that the pipeline is correct. They do not predict accuracy 
 
 ## Quick start
 
+### Use the pretrained model
+
+The weights behind the results above are available from the [v1.0 release](https://github.com/carlos-vi/ASR_experiments/releases/tag/v1.0) (13 MB). The language model comes from its official source (13 MB).
+
+```bash
+mkdir checkpoints
+curl -L -o checkpoints/conformer_ctc_librispeech.pt \
+    https://github.com/carlos-vi/ASR_experiments/releases/download/v1.0/conformer_ctc_librispeech.pt
+curl -L -O https://www.openslr.org/resources/11/3-gram.pruned.3e-7.arpa.gz
+
+python -m asr_from_scratch.inference checkpoints/conformer_ctc_librispeech.pt audio.wav \
+    --lm 3-gram.pruned.3e-7.arpa.gz
+```
+
 ### Train on Kaggle
 
 Open [`notebooks/train_kaggle.ipynb`](notebooks/train_kaggle.ipynb) on Kaggle, select **GPU T4 x2** and enable internet access, then run all cells. The notebook downloads the data, trains, evaluates on the test set and leaves `best.pt` in the output panel.
@@ -193,6 +207,28 @@ Natural next steps are longer training, SpecAugment and noise augmentation at th
 | `inference.py` | Audio file transcription |
 | `metrics.py` | WER and CER |
 | `synthetic.py` | Synthetic data for smoke tests |
+
+## Data, license and citation
+
+The code and the pretrained weights are released under the [MIT License](../LICENSE). The weights were trained on LibriSpeech, so please credit the corpus if you use them.
+
+| Resource | Used for | License |
+|---|---|---|
+| [LibriSpeech ASR corpus](https://www.openslr.org/12/) (SLR12) | Training and evaluation | CC BY 4.0 |
+| [`3-gram.pruned.3e-7.arpa.gz`](https://www.openslr.org/11/) (SLR11) | Beam search decoding | Public domain |
+
+LibriSpeech was created by Vassil Panayotov, Guoguo Chen, Daniel Povey and Sanjeev Khudanpur. This repository does not store or modify the corpus; the download script fetches it from the [`openslr/librispeech_asr`](https://huggingface.co/datasets/openslr/librispeech_asr) mirror on Hugging Face.
+
+```bibtex
+@inproceedings{panayotov2015librispeech,
+  title={Librispeech: an ASR corpus based on public domain audio books},
+  author={Panayotov, Vassil and Chen, Guoguo and Povey, Daniel and Khudanpur, Sanjeev},
+  booktitle={Acoustics, Speech and Signal Processing (ICASSP), 2015 IEEE International Conference on},
+  pages={5206--5210},
+  year={2015},
+  organization={IEEE}
+}
+```
 
 ## References
 
